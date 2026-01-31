@@ -324,21 +324,26 @@ def generate_landscape(landscape_bcd: int) -> array2d:
     return maparr
 
 
-def view_landscape(maparr: array2d) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.ticker import LinearLocator
     except ModuleNotFoundError:
-        sys.exit(
-            "Landscape requires matplotlib package:\n  python -m pip install matplotlib"
-        )
+        sys.exit("Landscape viewing requires matplotlib package")
 
     axis = np.arange(0, 0x20, 1)
     X, Y = np.meshgrid(axis, axis)
     Z = np.array(maparr) >> 4  # map just height nibble
 
-    flat_colours = ((0.0, 1.0, 0.0), (0.0, 0.62, 0.62))  # light green, dark green
+    flat_colours1 = (
+        (0.0, 1.0, 0.0), (1.0, 1.0, 0.62), (0.62, 1.0, 1.0), (1.0, 1.0, 0.62),
+        (1.0, 1.0, 1.0), (1.0, 0.75, 0.75), (1.0, 1.0, 1.0), (1.0, 1.0, 0.0))
+    flat_colours2 = (
+        (0.0, 0.62, 0.62), (0.62, 0.0, 0.62), (0.0, 0.62, 0.62), (0.87, 0.37, 0.0),
+        (0.37, 0.37, 1.0), (1.0, 0.0, 0.0), (0.62, 0.0, 0.62), (0.37, 0.37, 1.0))
+
+    flat_colours = (flat_colours1[num_sentries], flat_colours2[num_sentries])
     slope_colours = ((0.6, 0.6, 0.6), (0.7, 0.7, 0.7))  # light grey, dark grey
 
     colors = np.empty(X.shape, dtype="3f")
@@ -354,7 +359,7 @@ def view_landscape(maparr: array2d) -> None:
     ax.plot_surface(X, Y, Z, facecolors=colors, linewidth=0)
     ax.set_zlim(1, 11)
     ax.zaxis.set_major_locator(LinearLocator(6))
-
+    plt.title(f"Landscape {landscape_bcd:04X}")
     plt.show()
 
 
@@ -590,7 +595,8 @@ def main() -> None:
         maparr, objects = generate_level(args.landscape)
 
         if args.view:
-            view_landscape(maparr)
+            num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
+            view_landscape(maparr, args.landscape, num_sentries)
         else:
             if args.output:
                 with open(args.output, "wb") as f:
