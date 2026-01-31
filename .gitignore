@@ -1,2 +1,9 @@
-/.vscode
-/????.bin
+.*
+!.gitignore
+!.github
+!.vscode/extensions.json
+__pycache__/
+*.egg-info/
+*.py[cod]
+build/
+dist/

@@ -7,34 +7,26 @@ The script generates the landscape and positions of all game objects.
 
 ## Requirements
 
-The script requires Python 3.6 or later with the _NumPy_ package installed. You
-can install NumPy using:
-
-```
-python -m pip install numpy
-```
-
-Viewing landscapes with `-v` also requires the _matplotlib_ package, which can
-be installed using:
-
-```
-python -m pip install matplotlib
-```
+The script requires Python 3.10 or later with the _NumPy_ package installed.
+Viewing landscapes with `-v` also requires the _matplotlib_ package.
 
 ## Usage
 
 Generate landscape 1234 and save to `1234.bin` (data in row order):
-```
+
+```shell
 python sentland.py 1234
 ```
 
-Generate landscape 9999 and save to `9999.bin` (data in game memory format):
-```
-python sentland.py 9999 -m
+Generate landscape 9999 and save to `land.bin` with data in game memory format:
+
+```shell
+python sentland.py 9999 -o land.bin -m
 ```
 
 Generate and view landscape 0000:
-```
+
+```shell
 python sentland.py 0 -v
 ```
 
@@ -66,17 +58,17 @@ original memory layout use the `-m` option when saving data.
 
 All landscapes are generated using the following steps:
 
-### 1) Seed the RNG
+### 1. Seed the RNG
 
 The RNG is seeded using the landscape number, as described in the
 [sentcode.py](https://github.com/simonowen/sentcode) project.
 
-### 2) Warm the RNG
+### 2. Warm the RNG
 
 To ensure good random numbers are provided, 81 values are read from the RNG into
 a buffer. Note: these values are not used during the remainder of the process.
 
-### 3) Height scale
+### 3. Height scale
 
 Height scaling determines the range between the lowest and highest points on
 the landscape. Lower values keep the landscape flatter and easier to navigate.
@@ -84,20 +76,20 @@ Landscape 0000 uses a fixed scaling factor of 0x18, but all other landscapes
 use a random value massaged into the range 0x0e to 0x24. This will be used in
 step 6 below.
 
-### 4) Random fill
+### 4. Random fill
 
 The map area is filled with byte values from the RNG, with rows from back to
 front, in right to left order. The reverse ordering is due to the original 6502
 game code, which loops backwards as long as the index is positive using the
 `BPL` instruction.
 
-### 5) Smoothing passes
+### 5. Smoothing passes
 
 The random values are smoothed by averaging groups of 4 values and replacing the
 first value with this average. This is performed on each row from back to front,
 then each column from right to left. This process is repeated a second time.
 
-### 6) Scale and offset
+### 6. Scale and offset
 
 The smoothed values are treated as signed 7-bit values by subtracting each from
 0x80. The result is scaled by multiplying it by the height factor from step 3
@@ -105,7 +97,7 @@ above, then taking the upper 8 bits of the result to give the height. This is
 then offset by 6 to re-centre in the middle of the height range, before being
 clamped into the legal range of 1 to 11.
 
-### 7) De-spike passes
+### 7. De-spike passes
 
 To improve the appearance of the map all single vertex spikes and troughs are
 removed. This is again performed on rows from back to front, and columns from
@@ -118,7 +110,7 @@ details.
 
 This completes the final height generation, but not the stored data.
 
-### 8) Shape codes
+### 8. Shape codes
 
 To simplify use of the map at runtime the groups of 4 vertices that form each
 tile are compared to determine whether it's level and how it will appear when
@@ -128,7 +120,7 @@ each map value.
 A code of zero means the tile is level (all vertex heights match). See the
 script code for the layouts that generate the other values. Value 8 not used.
 
-### 9) Nibble swap
+### 9. Nibble swap
 
 The game prefers to work with the height in the upper 4 bits and the shape in
 the lower 4 bits, so this step reverses the order of the nibbles. This makes it
@@ -141,7 +133,7 @@ After generating the landscape objects are placed on it, in the order: pedestal,
 Sentinel, sentries (if any), player (robot) and trees. The number of sentries
 and trees varies between landscapes and the landscape colour depends this count.
 
-### 1) Sentry count
+### 1. Sentry count
 
 The base count of sentries is taken from the thousands digit of the landscape
 number, plus two. Then a value is taken from the RNG to use as an adjustment
@@ -158,14 +150,14 @@ count is never in range and the loop continues forever.
 For levels below 100 the sentry count is also limited to the tens digit of the
 landscape number, to make earlier levels a little easier.
 
-### 2) Highest points
+### 2. Highest points
 
 The map is scanned for the highest points to place the Sentinel and sentries.
 This is done in 4x4 areas (less 1 for right and back edges), in order from front
 to back and left to right. Within each area the height and location of the
 highest flat tile is stored. This gives up to 64 potential placement locations.
 
-### 3) Random high point
+### 3. Random high point
 
 The highest level from the previous step is used as a starting point to place
 the Sentinel and possibly sentries. The results from the previous step are
@@ -178,7 +170,7 @@ A value is taken from the RNG to use as an index into the new list. To avoid
 discarding too many out-of-range random indices the nearest 2^n-1 bitmask above
 the count is applied first. If it's still out of range the process is repeated.
 
-### 4) Place Sentinel/sentries
+### 4. Place Sentinel/sentries
 
 Once a valid random position is found the next Sentinel or sentry is ready for
 placement. If we're placing the Sentinel we put a pedestal on the same location
@@ -200,9 +192,9 @@ the rotation direction. If bit 0 is set the entity rotates anti-clockwise. Bits
 5 to 0 from the value are ORed with 5 give the number of game timer ticks until
 the object is due to rotate next.
 
-If more sentries are due to be placed the process repeats from step 2) above.
+If more sentries are due to be placed the process repeats from step 2 above.
 
-### 5) Place player
+### 5. Place player
 
 Landscape 0000 has a fixed starting location for the player at x=8 z=17. This
 was probably chosen to give the player a position with good visibility and
@@ -216,9 +208,9 @@ x and z coordinates are taken from the RNG and masked against 0x1f, each
 repeating until they're below 0x1f. This location is checked for an unoccupied
 flat tile below the height limit. This repeats up to 255 times until a suitable
 location is found. If the search is unsuccessful the height cap is raised by one
-and the process repeated. This continues until the maximum map height of 0xc.
+and the process repeated. This continues until the maximum map height of 12.
 
-### 6) Place trees
+### 6. Place trees
 
 The number of trees is used to balance out the total energy available on the
 landscape. More sentries means fewer trees can be placed.
@@ -247,4 +239,4 @@ generated data for these levels.
 ---
 
 Simon Owen  
-https://simonowen.com
+<https://simonowen.com>
