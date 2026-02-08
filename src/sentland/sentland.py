@@ -611,6 +611,84 @@ def main() -> None:
                 print("Objects:")
                 for o in objects:
                     print(f"  {o}")
+                print()
+
+                print("Shapes:\n")
+                print("y x ", end='')
+                for x in range(0, 31):
+                    print("{:>2} ".format(x), end='')
+                print()
+                for y in range(30, -1, -1):
+                    print("{:>2} ".format(y), end='')
+                    for x in range(0, 31):
+                        print("{:>3}".format(shape_at(x, y, maparr)), end='')
+                    print()
+                print()
+
+                print("Altitudes:\n")
+                print("y x ", end='')
+                for x in range(0, 32):
+                    print("{:>2} ".format(x), end='')
+                print()
+                for y in range(31, -1, -1):
+                    print("{:>2} ".format(y), end='')
+                    for x in range(0, 32):
+                        print("{:>3}".format(height_at(x, y, maparr)), end='')
+                    print()
+                print()
+
+                print("4a:\n")
+                for x in range(0, 31):
+                    for y in range(0, 31):
+                        if shape_at(x, y, maparr) == 4:
+                            s = height_at(x, y, maparr)
+                            t = height_at(x, y + 1, maparr)
+                            u = height_at(x + 1, y + 1, maparr)
+                            v = height_at(x + 1, y, maparr)
+                            if u == v:
+                                min_height = min(s, t, u, v)
+                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+
+                print("4b:\n")
+                for x in range(0, 31):
+                    for y in range(0, 31):
+                        if shape_at(x, y, maparr) == 4:
+                            s = height_at(x, y, maparr)
+                            t = height_at(x, y + 1, maparr)
+                            u = height_at(x + 1, y + 1, maparr)
+                            v = height_at(x + 1, y, maparr)
+                            if s == t:
+                                min_height = min(s, t, u, v)
+                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+
+                print("12a:\n")
+                for x in range(0, 31):
+                    for y in range(0, 31):
+                        if shape_at(x, y, maparr) == 12:
+                            s = height_at(x, y, maparr)
+                            t = height_at(x, y + 1, maparr)
+                            u = height_at(x + 1, y + 1, maparr)
+                            v = height_at(x + 1, y, maparr)
+                            if s != v:
+                                min_height = min(s, t, u, v)
+                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+
+                print("12b:\n")
+                for x in range(0, 31):
+                    for y in range(0, 31):
+                        if shape_at(x, y, maparr) == 12:
+                            s = height_at(x, y, maparr)
+                            t = height_at(x, y + 1, maparr)
+                            u = height_at(x + 1, y + 1, maparr)
+                            v = height_at(x + 1, y, maparr)
+                            if s == v:
+                                min_height = min(s, t, u, v)
+                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+
 
 
 if __name__ == "__main__":
