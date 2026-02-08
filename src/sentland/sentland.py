@@ -274,7 +274,7 @@ def arr_to_memory(maparr: array2d) -> bytes:
 
 def verify(maparr: array2d, landscape_bcd: int, name: str) -> None:
     """Verify the map data against golden images, if they exist"""
-    path = files("sentland.golden") / f"{landscape_bcd:04X}_{name}.bin"
+    path = files("golden") / f"{landscape_bcd:04X}_{name}.bin"
     if path.is_file():
         with path.open("rb") as f:
             if f.read() != arr_to_memory(maparr):
