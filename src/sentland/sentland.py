@@ -281,7 +281,7 @@ def verify(maparr: array2d, landscape_bcd: int, name: str) -> None:
                 sys.exit(f"Data mismatch against {path}")
 
 
-def generate_landscape(landscape_bcd: int) -> array2d:
+def generate_landscape(landscape_bcd: int, landscape_level: int) -> array2d:
     """Generate landscape data for given landscape number"""
     # Seed RNG using landscape number in BCD.
     seed(landscape_bcd)
@@ -297,34 +297,49 @@ def generate_landscape(landscape_bcd: int) -> array2d:
                 for x in range(0x20)])) for z in range(0x20)])))
     verify(maparr, landscape_bcd, "random")
 
-    # 2 passes of smoothing, each across z-axis then x-axis.
-    for _ in range(2):
+    if landscape_level >= 2:
+        # 2 passes of smoothing, each across z-axis then x-axis (pass 1).
         maparr = smooth_map(maparr, "z")
         maparr = smooth_map(maparr, "x")
-    verify(maparr, landscape_bcd, "smooth3")
 
-    # Scale and offset values to give vertex heights in range 1 to 11.
-    maparr = np.array([[scale_and_offset(int(x), height_scale) for x in z] for z in maparr])
-    verify(maparr, landscape_bcd, "scaled")
+    if landscape_level >= 3:
+        # 2 passes of smoothing, each across z-axis then x-axis (pass 2).
+        maparr = smooth_map(maparr, "z")
+        maparr = smooth_map(maparr, "x")
+        verify(maparr, landscape_bcd, "smooth3")
 
-    # Two de-spike passes, each across z-axis then x-axis.
-    for _ in range(2):
+    if landscape_level >= 4:
+        # Scale and offset values to give vertex heights in range 1 to 11.
+        maparr = np.array([[scale_and_offset(int(x), height_scale) for x in z] for z in maparr])
+        verify(maparr, landscape_bcd, "scaled")
+
+    if landscape_level >= 5:
+        # Two de-spike passes, each across z-axis then x-axis (pass 1).
         maparr = despike_map(maparr, "z")
         maparr = despike_map(maparr, "x")
-    verify(maparr, landscape_bcd, "despike3")
 
-    # Add shape codes for each tile, to simplify examining the landscape.
-    maparr = add_tile_shapes(maparr)
-    verify(maparr, landscape_bcd, "shape")
+    if landscape_level >= 6:
+        # Two de-spike passes, each across z-axis then x-axis (pass 2).
+        maparr = despike_map(maparr, "z")
+        maparr = despike_map(maparr, "x")
+        verify(maparr, landscape_bcd, "despike3")
 
-    # Finally, swap the high and low nibbles in each byte for the final format.
-    maparr = swap_nibbles(maparr)
-    verify(maparr, landscape_bcd, "swap")
+    if landscape_level >= 4:
+        # Add shape codes for each tile, to simplify examining the landscape.
+        maparr = add_tile_shapes(maparr)
+        if landscape_level >= 6:
+            verify(maparr, landscape_bcd, "shape")
+
+    if landscape_level >= 4:
+        # Finally, swap the high and low nibbles in each byte for the final format.
+        maparr = swap_nibbles(maparr)
+        if landscape_level >= 6:
+            verify(maparr, landscape_bcd, "swap")
 
     return maparr
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_level: int, save_file: str) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
@@ -334,7 +349,10 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int) -> No
 
     axis = np.arange(0, 0x20, 1)
     X, Y = np.meshgrid(axis, axis)
-    Z = np.array(maparr) >> 4  # map just height nibble
+    if landscape_level >= 4:
+        Z = np.array(maparr) >> 4  # map just height nibble
+    else:
+        Z = np.array(maparr)  # map full height range of 255
 
     flat_colours1 = (
         (0.0, 1.0, 0.0), (1.0, 1.0, 0.62), (0.62, 1.0, 1.0), (1.0, 1.0, 0.62),
@@ -356,11 +374,19 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int) -> No
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    ax.plot_surface(X, Y, Z, facecolors=colors, linewidth=0)
-    ax.set_zlim(1, 11)
+    if landscape_level >= 4:
+        ax.plot_surface(X, Y, Z, facecolors=colors, linewidth=0)
+        ax.set_zlim(1, 11)
+    else:
+        ax.scatter(X, Y, Z, s=2)
+        ax.set_zlim(0, 255)
     ax.zaxis.set_major_locator(LinearLocator(6))
     plt.title(f"Landscape {landscape_bcd:04X}")
-    plt.show()
+    if save_file:
+        # plt.figure(figsize=(8, 5)) # inches
+        plt.savefig(save_file, dpi=144, bbox_inches='tight')
+    else:
+        plt.show()
 
 
 def calc_num_sentries(landscape_bcd: int) -> int:
@@ -546,13 +572,14 @@ def place_trees(max_height: int, objects: list[Object], maparr: array2d) -> tupl
     return objects, max_height
 
 
-def generate_level(landscape_bcd: int) -> tuple[array2d, list[Object]]:
+def generate_level(landscape_bcd: int, landscape_level: int) -> tuple[array2d, list[Object]]:
     """Generate landscape level data and placed objects"""
-    maparr = generate_landscape(landscape_bcd)
+    maparr = generate_landscape(landscape_bcd, landscape_level)
 
     objects, max_height = place_sentries(landscape_bcd, maparr)
     objects, max_height = place_player(landscape_bcd, max_height, objects, maparr)
-    objects, max_height = place_trees(max_height, objects, maparr)
+    if landscape_level >= 6:
+        objects, max_height = place_trees(max_height, objects, maparr)
 
     return maparr, objects
 
@@ -579,6 +606,12 @@ def args_parser() -> argparse.ArgumentParser:
         help="suppress output messages", action="store_true", default=False)
     parser.add_argument('-V', '--version',
         action='version', version=f'%(prog)s {pkg_version}')
+    parser.add_argument("-l", "--level",
+        help="stop generating landscape at level 1-6", type=int, default=6)
+    parser.add_argument("-t", "--tileinfo",
+        help="output data about tiles and shapes", action="store_true", default=False)
+    parser.add_argument("-s", "--save",
+        help="save image as a png (disables -v)", default=None)
     return parser
 
 
@@ -592,11 +625,11 @@ def main() -> None:
     elif args.landscape < 0 or args.landscape >= num_landscapes:
         sys.exit(f"Landscape number must be in range 0000-{num_landscapes-1:04X}")
     else:
-        maparr, objects = generate_level(args.landscape)
+        maparr, objects = generate_level(args.landscape, args.level)
 
         if args.view:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries)
+            view_landscape(maparr, args.landscape, num_sentries, args.level, args.save)
         else:
             if args.output:
                 with open(args.output, "wb") as f:
@@ -613,81 +646,82 @@ def main() -> None:
                     print(f"  {o}")
                 print()
 
-                print("Shapes:\n")
-                print("y x ", end='')
-                for x in range(0, 31):
-                    print("{:>2} ".format(x), end='')
-                print()
-                for y in range(30, -1, -1):
-                    print("{:>2} ".format(y), end='')
+                if args.tileinfo:
+                    print("Shapes:\n")
+                    print("y x ", end='')
                     for x in range(0, 31):
-                        print("{:>3}".format(shape_at(x, y, maparr)), end='')
+                        print("{:>2} ".format(x), end='')
                     print()
-                print()
+                    for y in range(30, -1, -1):
+                        print("{:>2} ".format(y), end='')
+                        for x in range(0, 31):
+                            print("{:>3}".format(shape_at(x, y, maparr)), end='')
+                        print()
+                    print()
 
-                print("Altitudes:\n")
-                print("y x ", end='')
-                for x in range(0, 32):
-                    print("{:>2} ".format(x), end='')
-                print()
-                for y in range(31, -1, -1):
-                    print("{:>2} ".format(y), end='')
+                    print("Altitudes:\n")
+                    print("y x ", end='')
                     for x in range(0, 32):
-                        print("{:>3}".format(height_at(x, y, maparr)), end='')
+                        print("{:>2} ".format(x), end='')
                     print()
-                print()
+                    for y in range(31, -1, -1):
+                        print("{:>2} ".format(y), end='')
+                        for x in range(0, 32):
+                            print("{:>3}".format(height_at(x, y, maparr)), end='')
+                        print()
+                    print()
 
-                print("4a:\n")
-                for x in range(0, 31):
-                    for y in range(0, 31):
-                        if shape_at(x, y, maparr) == 4:
-                            s = height_at(x, y, maparr)
-                            t = height_at(x, y + 1, maparr)
-                            u = height_at(x + 1, y + 1, maparr)
-                            v = height_at(x + 1, y, maparr)
-                            if u == v:
-                                min_height = min(s, t, u, v)
-                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
-                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+                    print("4a:\n")
+                    for x in range(0, 31):
+                        for y in range(0, 31):
+                            if shape_at(x, y, maparr) == 4:
+                                s = height_at(x, y, maparr)
+                                t = height_at(x, y + 1, maparr)
+                                u = height_at(x + 1, y + 1, maparr)
+                                v = height_at(x + 1, y, maparr)
+                                if u == v:
+                                    min_height = min(s, t, u, v)
+                                    print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                    print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
-                print("4b:\n")
-                for x in range(0, 31):
-                    for y in range(0, 31):
-                        if shape_at(x, y, maparr) == 4:
-                            s = height_at(x, y, maparr)
-                            t = height_at(x, y + 1, maparr)
-                            u = height_at(x + 1, y + 1, maparr)
-                            v = height_at(x + 1, y, maparr)
-                            if s == t:
-                                min_height = min(s, t, u, v)
-                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
-                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+                    print("4b:\n")
+                    for x in range(0, 31):
+                        for y in range(0, 31):
+                            if shape_at(x, y, maparr) == 4:
+                                s = height_at(x, y, maparr)
+                                t = height_at(x, y + 1, maparr)
+                                u = height_at(x + 1, y + 1, maparr)
+                                v = height_at(x + 1, y, maparr)
+                                if s == t:
+                                    min_height = min(s, t, u, v)
+                                    print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                    print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
-                print("12a:\n")
-                for x in range(0, 31):
-                    for y in range(0, 31):
-                        if shape_at(x, y, maparr) == 12:
-                            s = height_at(x, y, maparr)
-                            t = height_at(x, y + 1, maparr)
-                            u = height_at(x + 1, y + 1, maparr)
-                            v = height_at(x + 1, y, maparr)
-                            if s != v:
-                                min_height = min(s, t, u, v)
-                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
-                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+                    print("12a:\n")
+                    for x in range(0, 31):
+                        for y in range(0, 31):
+                            if shape_at(x, y, maparr) == 12:
+                                s = height_at(x, y, maparr)
+                                t = height_at(x, y + 1, maparr)
+                                u = height_at(x + 1, y + 1, maparr)
+                                v = height_at(x + 1, y, maparr)
+                                if s != v:
+                                    min_height = min(s, t, u, v)
+                                    print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                    print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
-                print("12b:\n")
-                for x in range(0, 31):
-                    for y in range(0, 31):
-                        if shape_at(x, y, maparr) == 12:
-                            s = height_at(x, y, maparr)
-                            t = height_at(x, y + 1, maparr)
-                            u = height_at(x + 1, y + 1, maparr)
-                            v = height_at(x + 1, y, maparr)
-                            if s == v:
-                                min_height = min(s, t, u, v)
-                                print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
-                                print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
+                    print("12b:\n")
+                    for x in range(0, 31):
+                        for y in range(0, 31):
+                            if shape_at(x, y, maparr) == 12:
+                                s = height_at(x, y, maparr)
+                                t = height_at(x, y + 1, maparr)
+                                u = height_at(x + 1, y + 1, maparr)
+                                v = height_at(x + 1, y, maparr)
+                                if s == v:
+                                    min_height = min(s, t, u, v)
+                                    print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
+                                    print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
 
 
