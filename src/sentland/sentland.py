@@ -339,11 +339,12 @@ def generate_landscape(landscape_bcd: int, landscape_level: int) -> array2d:
     return maparr
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_level: int, save_file: str) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_level: int, save_file: str, view_landscape: bool) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.ticker import LinearLocator
+        from matplotlib.transforms import Bbox
     except ModuleNotFoundError:
         sys.exit("Landscape viewing requires matplotlib package")
 
@@ -381,11 +382,16 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         ax.scatter(X, Y, Z, s=2)
         ax.set_zlim(0, 255)
     ax.zaxis.set_major_locator(LinearLocator(6))
-    plt.title(f"Landscape {landscape_bcd:04X}")
+    if landscape_level <= 6:
+        # Levels 1-6 map to steps 4-9
+        step_name = landscape_level + 3
+        plt.title(f"Landscape {landscape_bcd:04X}, step {step_name}")
+    else:
+        plt.title(f"Landscape {landscape_bcd:04X}")
     if save_file:
         # plt.figure(figsize=(8, 5)) # inches
-        plt.savefig(save_file, dpi=144, bbox_inches='tight')
-    else:
+        plt.savefig(save_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
+    if view_landscape:
         plt.show()
 
 
@@ -607,7 +613,7 @@ def args_parser() -> argparse.ArgumentParser:
     parser.add_argument('-V', '--version',
         action='version', version=f'%(prog)s {pkg_version}')
     parser.add_argument("-l", "--level",
-        help="stop generating landscape at level 1-6", type=int, default=6)
+        help="stop generating landscape at level 1-6", type=int, default=7)
     parser.add_argument("-t", "--tileinfo",
         help="output data about tiles and shapes", action="store_true", default=False)
     parser.add_argument("-s", "--save",
@@ -719,9 +725,9 @@ def main() -> None:
                                 print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
                                 print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
-        if args.view:
+        if args.view or args.save:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries, args.level, args.save)
+            view_landscape(maparr, args.landscape, num_sentries, args.level, args.save, args.view)
 
 
 if __name__ == "__main__":
