@@ -281,7 +281,7 @@ def verify(maparr: array2d, landscape_bcd: int, name: str) -> None:
                 sys.exit(f"Data mismatch against {path}")
 
 
-def generate_landscape(landscape_bcd: int, landscape_level: int) -> array2d:
+def generate_landscape(landscape_bcd: int, landscape_step: int) -> array2d:
     """Generate landscape data for given landscape number"""
     # Seed RNG using landscape number in BCD.
     seed(landscape_bcd)
@@ -297,49 +297,49 @@ def generate_landscape(landscape_bcd: int, landscape_level: int) -> array2d:
                 for x in range(0x20)])) for z in range(0x20)])))
     verify(maparr, landscape_bcd, "random")
 
-    if landscape_level >= 2:
+    if landscape_step >= 2:
         # 2 passes of smoothing, each across z-axis then x-axis (pass 1).
         maparr = smooth_map(maparr, "z")
         maparr = smooth_map(maparr, "x")
 
-    if landscape_level >= 3:
+    if landscape_step >= 3:
         # 2 passes of smoothing, each across z-axis then x-axis (pass 2).
         maparr = smooth_map(maparr, "z")
         maparr = smooth_map(maparr, "x")
         verify(maparr, landscape_bcd, "smooth3")
 
-    if landscape_level >= 4:
+    if landscape_step >= 4:
         # Scale and offset values to give vertex heights in range 1 to 11.
         maparr = np.array([[scale_and_offset(int(x), height_scale) for x in z] for z in maparr])
         verify(maparr, landscape_bcd, "scaled")
 
-    if landscape_level >= 5:
+    if landscape_step >= 5:
         # Two de-spike passes, each across z-axis then x-axis (pass 1).
         maparr = despike_map(maparr, "z")
         maparr = despike_map(maparr, "x")
 
-    if landscape_level >= 6:
+    if landscape_step >= 6:
         # Two de-spike passes, each across z-axis then x-axis (pass 2).
         maparr = despike_map(maparr, "z")
         maparr = despike_map(maparr, "x")
         verify(maparr, landscape_bcd, "despike3")
 
-    if landscape_level >= 4:
+    if landscape_step >= 4:
         # Add shape codes for each tile, to simplify examining the landscape.
         maparr = add_tile_shapes(maparr)
-        if landscape_level >= 6:
+        if landscape_step >= 6:
             verify(maparr, landscape_bcd, "shape")
 
-    if landscape_level >= 4:
+    if landscape_step >= 4:
         # Finally, swap the high and low nibbles in each byte for the final format.
         maparr = swap_nibbles(maparr)
-        if landscape_level >= 6:
+        if landscape_step >= 6:
             verify(maparr, landscape_bcd, "swap")
 
     return maparr
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_level: int, save_file: str, view_landscape: bool) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
@@ -350,7 +350,7 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
 
     axis = np.arange(0, 0x20, 1)
     X, Y = np.meshgrid(axis, axis)
-    if landscape_level >= 4:
+    if landscape_step >= 4:
         Z = np.array(maparr) >> 4  # map just height nibble
     else:
         Z = np.array(maparr)  # map full height range of 255
@@ -373,24 +373,55 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
             else:
                 colors[y, x] = flat_colours[(x + y) & 1]
 
+    if dark:
+        plt.style.use("dark_background")
+        plt.rcParams['grid.color'] = (0.4, 0.4, 0.4, 1.0)
+
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    if landscape_level >= 4:
+    ax.set_xlabel('x')
+    ax.set_ylabel('z')
+    ax.set_zlabel('y')
+    ax.xaxis.set_ticks([0, 10, 20, 30])
+    ax.yaxis.set_ticks([0, 10, 20, 30])
+
+    if dark:
+        ax.xaxis.set_pane_color((0.2, 0.2, 0.2, 1.0))
+        ax.yaxis.set_pane_color((0.2, 0.2, 0.2, 1.0))
+        ax.zaxis.set_pane_color((0.2, 0.2, 0.2, 1.0))
+
+    if landscape_step >= 7:
         ax.plot_surface(X, Y, Z, facecolors=colors, linewidth=0)
-        ax.set_zlim(1, 11)
     else:
         ax.scatter(X, Y, Z, s=2)
-        ax.set_zlim(0, 255)
-    ax.zaxis.set_major_locator(LinearLocator(6))
-    if landscape_level <= 6:
-        # Levels 1-6 map to steps 4-9
-        step_name = landscape_level + 3
-        plt.title(f"Landscape {landscape_bcd:04X}, step {step_name}")
+
+    if landscape_step >= 4:
+        ax.set_zlim(1, 11)
+        ax.zaxis.set_major_locator(LinearLocator(6))
     else:
-        plt.title(f"Landscape {landscape_bcd:04X}")
-    if save_file:
-        # plt.figure(figsize=(8, 5)) # inches
-        plt.savefig(save_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
+        ax.set_zlim(0, 255)
+        ax.zaxis.set_ticks([0, 64, 128, 192, 255])
+
+    match landscape_step:
+        case 1:
+            plt.title(f"Landscape {landscape_bcd:04X}\nSteps 1-4: Seed tile data")
+        case 2:
+            plt.title(f"Landscape {landscape_bcd:04X}\nStep 5: Smooth by average (pass 1)")
+        case 3:
+            plt.title(f"Landscape {landscape_bcd:04X}\nStep 6: Smooth by average (pass 2)")
+        case 4:
+            plt.title(f"Landscape {landscape_bcd:04X}\nStep 7: Scale and cap")
+        case 5:
+            plt.title(f"Landscape {landscape_bcd:04X}\nStep 8: Smooth spikes (pass 1)")
+        case 6:
+            plt.title(f"Landscape {landscape_bcd:04X}\nStep 9: Smooth spikes (pass 2)")
+        case 7:
+            plt.title(f"Landscape {landscape_bcd:04X}\nSteps 10-11: Calculate tile shapes")
+        case _:
+            plt.title(f"Landscape {landscape_bcd:04X}")
+
+    if export_file:
+        plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
     if view_landscape:
         plt.show()
 
@@ -578,13 +609,13 @@ def place_trees(max_height: int, objects: list[Object], maparr: array2d) -> tupl
     return objects, max_height
 
 
-def generate_level(landscape_bcd: int, landscape_level: int) -> tuple[array2d, list[Object]]:
+def generate_level(landscape_bcd: int, landscape_step: int) -> tuple[array2d, list[Object]]:
     """Generate landscape level data and placed objects"""
-    maparr = generate_landscape(landscape_bcd, landscape_level)
+    maparr = generate_landscape(landscape_bcd, landscape_step)
 
     objects, max_height = place_sentries(landscape_bcd, maparr)
     objects, max_height = place_player(landscape_bcd, max_height, objects, maparr)
-    if landscape_level >= 6:
+    if landscape_step >= 6:
         objects, max_height = place_trees(max_height, objects, maparr)
 
     return maparr, objects
@@ -612,12 +643,14 @@ def args_parser() -> argparse.ArgumentParser:
         help="suppress output messages", action="store_true", default=False)
     parser.add_argument('-V', '--version',
         action='version', version=f'%(prog)s {pkg_version}')
-    parser.add_argument("-l", "--level",
-        help="stop generating landscape at level 1-6", type=int, default=7)
+    parser.add_argument("-s", "--step",
+        help="stop generating landscape at step 1-7", type=int, default=8)
     parser.add_argument("-t", "--tileinfo",
         help="output data about tiles and shapes", action="store_true", default=False)
-    parser.add_argument("-s", "--save",
-        help="save image as a png (disables -v)", default=None)
+    parser.add_argument("-e", "--export",
+        help="export image as a png (disables -v)", default=None)
+    parser.add_argument("-d", "--dark",
+        help="view landscape in the dark", action="store_true", default=False)
     return parser
 
 
@@ -631,7 +664,7 @@ def main() -> None:
     elif args.landscape < 0 or args.landscape >= num_landscapes:
         sys.exit(f"Landscape number must be in range 0000-{num_landscapes-1:04X}")
     else:
-        maparr, objects = generate_level(args.landscape, args.level)
+        maparr, objects = generate_level(args.landscape, args.step)
 
         if args.output:
             with open(args.output, "wb") as f:
@@ -725,9 +758,9 @@ def main() -> None:
                                 print("{:>2},{:>2}: {} {}  {} {}".format(x, y, t, u, t - min_height, u - min_height))
                                 print("       {} {}  {} {}\n".format(s, v, s - min_height, v - min_height))
 
-        if args.view or args.save:
+        if args.view or args.export:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries, args.level, args.save, args.view)
+            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark)
 
 
 if __name__ == "__main__":
