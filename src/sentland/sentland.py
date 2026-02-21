@@ -281,7 +281,7 @@ def verify(maparr: array2d, landscape_bcd: int, name: str) -> None:
                 sys.exit(f"Data mismatch against {path}")
 
 
-def generate_landscape(landscape_bcd: int, landscape_step: int) -> array2d:
+def generate_landscape(landscape_bcd: int, landscape_step: int) -> tuple[array2d, int]:
     """Generate landscape data for given landscape number"""
     # Seed RNG using landscape number in BCD.
     seed(landscape_bcd)
@@ -336,7 +336,7 @@ def generate_landscape(landscape_bcd: int, landscape_step: int) -> array2d:
         if landscape_step >= 6:
             verify(maparr, landscape_bcd, "swap")
 
-    return maparr
+    return maparr, height_scale
 
 
 def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool) -> None:
@@ -609,16 +609,16 @@ def place_trees(max_height: int, objects: list[Object], maparr: array2d) -> tupl
     return objects, max_height
 
 
-def generate_level(landscape_bcd: int, landscape_step: int) -> tuple[array2d, list[Object]]:
+def generate_level(landscape_bcd: int, landscape_step: int) -> tuple[array2d, list[Object], int]:
     """Generate landscape level data and placed objects"""
-    maparr = generate_landscape(landscape_bcd, landscape_step)
+    maparr, height_scale = generate_landscape(landscape_bcd, landscape_step)
 
     objects, max_height = place_sentries(landscape_bcd, maparr)
     objects, max_height = place_player(landscape_bcd, max_height, objects, maparr)
     if landscape_step >= 6:
         objects, max_height = place_trees(max_height, objects, maparr)
 
-    return maparr, objects
+    return maparr, objects, height_scale
 
 
 def args_parser() -> argparse.ArgumentParser:
@@ -647,6 +647,8 @@ def args_parser() -> argparse.ArgumentParser:
         help="stop generating landscape at step 1-7", type=int, default=8)
     parser.add_argument("-t", "--tileinfo",
         help="output data about tiles and shapes", action="store_true", default=False)
+    parser.add_argument("-x", "--xdata",
+        help="output extra data about the landscape", action="store_true", default=False)
     parser.add_argument("-e", "--export",
         help="export image as a png (disables -v)", default=None)
     parser.add_argument("-d", "--dark",
@@ -664,7 +666,7 @@ def main() -> None:
     elif args.landscape < 0 or args.landscape >= num_landscapes:
         sys.exit(f"Landscape number must be in range 0000-{num_landscapes-1:04X}")
     else:
-        maparr, objects = generate_level(args.landscape, args.step)
+        maparr, objects, height_scale = generate_level(args.landscape, args.step)
 
         if args.output:
             with open(args.output, "wb") as f:
@@ -676,12 +678,27 @@ def main() -> None:
                 print(f"Wrote landscape {args.landscape:04X} to {args.output}")
 
         if not args.quiet:
-            print("Objects:")
-            for o in objects:
-                print(f"  {o}")
-            print()
+            if args.xdata:
+                # Landscape - Multiplier - Tree count - Sentry count
+                trees = 0
+                sentries = 0
+                for o in objects:
+                    if o.type == ObjType.TREE:
+                        trees += 1
+                    if o.type == ObjType.SENTRY:
+                        sentries += 1
+                print("{:04X}\t{}\t{}\t{}".format(args.landscape, height_scale, trees, sentries))
+            else:
+                print("Landscape: {:04d}\n".format(args.landscape))
 
             if args.tileinfo:
+                print("Tile data multiplier (14-36): {}\n".format(height_scale))
+
+                print("Objects:")
+                for o in objects:
+                    print(f"  {o}")
+                print()
+
                 print("Shapes:\n")
                 print("y x ", end='')
                 for x in range(0, 31):
