@@ -362,7 +362,6 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         (0.0, 0.62, 0.62), (0.62, 0.0, 0.62), (0.0, 0.62, 0.62), (0.87, 0.37, 0.0),
         (0.37, 0.37, 1.0), (1.0, 0.0, 0.0), (0.62, 0.0, 0.62), (0.37, 0.37, 1.0))
 
-
     flat_colours = (flat_colours1[num_sentries], flat_colours2[num_sentries])
     slope_colours = ((0.6, 0.6, 0.6), (0.7, 0.7, 0.7))  # light grey, dark grey
 
@@ -716,7 +715,7 @@ def main() -> None:
 
         if not args.quiet:
             if args.xdata:
-                # Landscape - Multiplier - Tree count - Sentry count
+                # Landscape - Multiplier - Tree count - Sentry count - RNG usage
                 trees = 0
                 sentries = 0
                 for o in objects:
@@ -724,7 +723,7 @@ def main() -> None:
                         trees += 1
                     if o.type == ObjType.SENTRY:
                         sentries += 1
-                print("{:04X}\t{}\t{}\t{}".format(args.landscape, height_scale, trees, sentries))
+                print("{:04X}\t{}\t{}\t{}\t{}".format(args.landscape, height_scale, trees, sentries, rng_usage))
             else:
                 print("Landscape: {:04d}\n".format(args.landscape))
 
