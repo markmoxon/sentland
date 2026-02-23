@@ -107,7 +107,7 @@ def smooth_slice(arr: list[int]) -> list[int]:
     """Smooth a map slice by averaging neighbouring groups of values"""
     group_size = len(arr) - 0x1F
     return [
-        sum(arr[x : x + group_size]) // group_size
+        sum(arr[x:(x + group_size)]) // group_size
         for x in range(len(arr) - group_size + 1)
     ]
 
@@ -148,7 +148,7 @@ def despike_slice(arr: list[int]) -> list[int]:
     """Smooth a slice by flattening single vertex peaks and troughs"""
     arr_copy = arr[:]
     for x in reversed(range(0x20)):
-        arr_copy[x + 1] = despike_midval(arr_copy[x : x + 3])
+        arr_copy[x + 1] = despike_midval(arr_copy[x:(x + 3)])
     return arr_copy[:32]
 
 
@@ -294,7 +294,7 @@ def generate_landscape(landscape_bcd: int, landscape_step: int) -> tuple[array2d
 
     # Fill the map with random values (z from back to front, x from right to left).
     maparr = np.array(list(reversed([list(reversed([rng()
-                for x in range(0x20)])) for z in range(0x20)])))
+                      for x in range(0x20)])) for z in range(0x20)])))
     verify(maparr, landscape_bcd, "random")
 
     if landscape_step >= 2:
@@ -339,7 +339,7 @@ def generate_landscape(landscape_bcd: int, landscape_step: int) -> tuple[array2d
     return maparr, height_scale
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool, colour_objects: bool, objects: list[Object]) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
@@ -362,8 +362,29 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         (0.0, 0.62, 0.62), (0.62, 0.0, 0.62), (0.0, 0.62, 0.62), (0.87, 0.37, 0.0),
         (0.37, 0.37, 1.0), (1.0, 0.0, 0.0), (0.62, 0.0, 0.62), (0.37, 0.37, 1.0))
 
+
     flat_colours = (flat_colours1[num_sentries], flat_colours2[num_sentries])
     slope_colours = ((0.6, 0.6, 0.6), (0.7, 0.7, 0.7))  # light grey, dark grey
+
+    # Sentinel is red or blue
+    sentinel_colours = (
+        (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (1.0, 0.0, 0.0))
+
+    # Sentries are orange or light blue
+    sentry_colours = (
+        (1.0, 0.5, 0.3), (0.0, 0.5, 1.0), (1.0, 0.5, 0.3), (0.0, 0.5, 1.0),
+        (1.0, 0.5, 0.3), (0.0, 0.5, 1.0), (1.0, 0.5, 0.3), (1.0, 0.5, 0.3))
+
+    # Player is yellow or magenta
+    player_colours = (
+        (1.0, 1.0, 0.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0), (1.0, 1.0, 0.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0))
+
+    # Trees are magenta or green
+    tree_colours = (
+        (1.0, 0.0, 1.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0))
 
     colors = np.empty(X.shape, dtype="3f")
     for y in range(len(Y)):
@@ -371,7 +392,21 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
             if maparr[y][x] & 0xF:
                 colors[y, x] = slope_colours[(x + y) & 1]
             else:
-                colors[y, x] = flat_colours[(x + y) & 1]
+                if colour_objects:
+                    object_stack = objects_at(x, y, objects)
+                    if object_stack:
+                        if object_stack[0].type == ObjType.SENTINEL or object_stack[0].type == ObjType.PEDESTAL:
+                            colors[y, x] = sentinel_colours[num_sentries]
+                        elif object_stack[0].type == ObjType.SENTRY:
+                            colors[y, x] = sentry_colours[num_sentries]
+                        elif object_stack[0].type == ObjType.ROBOT:
+                            colors[y, x] = player_colours[num_sentries]
+                        elif object_stack[0].type == ObjType.TREE:
+                            colors[y, x] = tree_colours[num_sentries]
+                    else:
+                        colors[y, x] = flat_colours[(x + y) & 1]
+                else:
+                    colors[y, x] = flat_colours[(x + y) & 1]
 
     if dark:
         plt.style.use("dark_background")
@@ -632,27 +667,29 @@ def args_parser() -> argparse.ArgumentParser:
         description="Landscape generator for The Sentinel.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("landscape",
-        help="landscape number", type=lambda x: int(x, 16), nargs="?")
+                        help="landscape number", type=lambda x: int(x, 16), nargs="?")
     parser.add_argument("-v", "--view",
-        help="view landscape in matplot", action="store_true", default=False)
+                        help="view landscape in matplot", action="store_true", default=False)
     parser.add_argument("-o", "--output",
-        help="output file name", type=str, default=None)
+                        help="output file name", type=str, default=None)
     parser.add_argument("-m", "--memory",
-        help="save data in game memory format", action="store_true", default=False)
+                        help="save data in game memory format", action="store_true", default=False)
     parser.add_argument("-q", "--quiet",
-        help="suppress output messages", action="store_true", default=False)
+                        help="suppress output messages", action="store_true", default=False)
     parser.add_argument('-V', '--version',
-        action='version', version=f'%(prog)s {pkg_version}')
+                        action='version', version=f'%(prog)s {pkg_version}')
     parser.add_argument("-s", "--step",
-        help="stop generating landscape at step 1-7", type=int, default=8)
+                        help="stop generating landscape at step 1-7", type=int, default=8)
     parser.add_argument("-t", "--tileinfo",
-        help="output data about tiles and shapes", action="store_true", default=False)
+                        help="output data about tiles and shapes", action="store_true", default=False)
     parser.add_argument("-x", "--xdata",
-        help="output extra data about the landscape", action="store_true", default=False)
+                        help="output extra data about the landscape", action="store_true", default=False)
     parser.add_argument("-e", "--export",
-        help="export image as a png (disables -v)", default=None)
+                        help="export image as a png (disables -v)", default=None)
     parser.add_argument("-d", "--dark",
-        help="view landscape in the dark", action="store_true", default=False)
+                        help="view landscape in the dark", action="store_true", default=False)
+    parser.add_argument("-c", "--colourobjects",
+                        help="colour tiles containing objects", action="store_true", default=False)
     return parser
 
 
@@ -777,7 +814,7 @@ def main() -> None:
 
         if args.view or args.export:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark)
+            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark, args.colourobjects, objects)
 
 
 if __name__ == "__main__":
