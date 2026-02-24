@@ -339,12 +339,13 @@ def generate_landscape(landscape_bcd: int, landscape_step: int) -> tuple[array2d
     return maparr, height_scale
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool, colour_objects: bool, objects: list[Object]) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool, colour_objects: bool, colour_angle: bool, objects: list[Object]) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.ticker import LinearLocator
         from matplotlib.transforms import Bbox
+        from matplotlib.lines import Line2D
     except ModuleNotFoundError:
         sys.exit("Landscape viewing requires matplotlib package")
 
@@ -375,9 +376,9 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         (1.0, 0.5, 0.3), (0.0, 0.5, 1.0), (1.0, 0.5, 0.3), (0.0, 0.5, 1.0),
         (1.0, 0.5, 0.3), (0.0, 0.5, 1.0), (1.0, 0.5, 0.3), (1.0, 0.5, 0.3))
 
-    # Player is yellow or magenta
+    # Player is yellow, red or magenta
     player_colours = (
-        (1.0, 1.0, 0.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0),
         (1.0, 1.0, 0.0), (1.0, 1.0, 0.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0))
 
     # Trees are magenta or green
@@ -413,6 +414,20 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
+
+    if colour_objects:
+        if colour_angle:
+            # More overhead for viewing player object in landscape 1122
+            ax.view_init(elev=74, azim=-82, roll=-12)
+        else:
+            # Slightly overhead view, good for object colours
+            ax.view_init(elev=60, azim=-65, roll=7)
+        sentinel_legend = Line2D([], [], color=sentinel_colours[num_sentries], marker='s', ls='', label='Sentinel')
+        sentry_legend = Line2D([], [], color=sentry_colours[num_sentries], marker='s', ls='', label='Sentry')
+        player_legend = Line2D([], [], color=player_colours[num_sentries], marker='s', ls='', label='Player')
+        tree_legend = Line2D([], [], color=tree_colours[num_sentries], marker='s', ls='', label='Tree')
+        plt.legend(handles=[sentinel_legend, sentry_legend, player_legend, tree_legend], loc='upper right', bbox_to_anchor=(1.1, 1.15))
+
     ax.set_xlabel('x')
     ax.set_ylabel('z')
     ax.set_zlabel('y')
@@ -452,7 +467,10 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         case 7:
             plt.title(f"Landscape {landscape_bcd:04X}\nSteps 10-11: Calculate tile shapes")
         case _:
-            plt.title(f"Landscape {landscape_bcd:04X}")
+            if colour_objects:
+                plt.title(f"Landscape {landscape_bcd:04X}", loc='left', y=1.05)
+            else:
+                plt.title(f"Landscape {landscape_bcd:04X}")
 
     if export_file:
         plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
@@ -689,6 +707,8 @@ def args_parser() -> argparse.ArgumentParser:
                         help="view landscape in the dark", action="store_true", default=False)
     parser.add_argument("-c", "--colourobjects",
                         help="colour tiles containing objects", action="store_true", default=False)
+    parser.add_argument("-a", "--angle",
+                        help="higher tile for colour objects", action="store_true", default=False)
     return parser
 
 
@@ -725,7 +745,7 @@ def main() -> None:
                         sentries += 1
                 print("{:04X}\t{}\t{}\t{}\t{}".format(args.landscape, height_scale, trees, sentries, rng_usage))
             else:
-                print("Landscape: {:04d}\n".format(args.landscape))
+                print("Landscape: {:04X}\n".format(args.landscape))
 
             if args.tileinfo:
                 print("Tile data multiplier (14-36): {}\n".format(height_scale))
@@ -813,7 +833,7 @@ def main() -> None:
 
         if args.view or args.export:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark, args.colourobjects, objects)
+            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark, args.colourobjects, args.angle, objects)
 
 
 if __name__ == "__main__":
