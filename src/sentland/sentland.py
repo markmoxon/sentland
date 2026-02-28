@@ -661,6 +661,71 @@ def place_trees(max_height: int, objects: list[Object], maparr: array2d) -> tupl
     return objects, max_height
 
 
+def rng_bcd_digits():
+    x = rng()
+
+    # Left digit
+    a = (x >> 4) & 0xf
+    if a > 9:
+        a -= 6
+
+    # Right digit
+    b = (x >> 0) & 0xf
+    if b > 9:
+        b -= 6
+
+    return (a << 4) | b
+
+
+def bbc_c64_digits():
+    return rng_bcd_digits()
+
+
+def cpc_digits():
+    b = (rng_bcd_digits() >> 4) & 0x0f
+    a = (rng_bcd_digits() << 4) & 0xf0
+    return a | b
+
+
+def spectrum_digits():
+    b = rng_bcd_digits() & 0x0f
+    a = rng_bcd_digits() & 0xf0
+    return a | b
+
+
+def pc_st_digits():
+    for _ in range(3):
+        rng()
+
+    b = rng_bcd_digits() & 0x0f
+    a = rng_bcd_digits() & 0xf0
+    return a | b
+
+
+def amiga_digits():
+    for _ in range(3):
+        rng()
+
+    b = (rng_bcd_digits() >> 4) & 0x0f
+    a = (rng_bcd_digits() << 4) & 0xf0
+    return a | b
+
+
+def generate_code(fn_pair, state):
+    global ull
+
+    # Set cached seeded state after landscape generation
+    ull = state
+
+    # Advance the RNG in digit pairs, for the code check obfuscation.
+    for _ in range(0xa5 - 0x80 + 1):
+        fn_pair()
+
+    # The next 4 values are the landscape code.
+    a, b, c, d = fn_pair(), fn_pair(), fn_pair(), fn_pair()
+    return "{:02X}{:02X}{:02X}{:02X}".format(a, b, c, d)
+
+
 def generate_level(landscape_bcd: int, landscape_step: int) -> tuple[array2d, list[Object], int]:
     """Generate landscape level data and placed objects"""
     maparr, height_scale = generate_landscape(landscape_bcd, landscape_step)
@@ -671,6 +736,21 @@ def generate_level(landscape_bcd: int, landscape_step: int) -> tuple[array2d, li
         objects, max_height = place_trees(max_height, objects, maparr)
 
     return maparr, objects, height_scale
+
+
+def generate_codes(landscape_bcd: int):
+    global ull
+
+    # Save RNG state as the starting point to generate codes.
+    state = ull
+
+    return [
+        generate_code(bbc_c64_digits, state),
+        generate_code(cpc_digits, state),
+        generate_code(spectrum_digits, state),
+        generate_code(pc_st_digits, state),
+        generate_code(amiga_digits, state)
+    ]
 
 
 def args_parser() -> argparse.ArgumentParser:
@@ -735,7 +815,8 @@ def main() -> None:
 
         if not args.quiet:
             if args.xdata:
-                # Landscape - Multiplier - Tree count - Sentry count - RNG usage
+                rng_usage_for_landscape = rng_usage
+                codes = generate_codes(args.landscape)
                 trees = 0
                 sentries = 0
                 for o in objects:
@@ -743,7 +824,18 @@ def main() -> None:
                         trees += 1
                     if o.type == ObjType.SENTRY:
                         sentries += 1
-                print("{:04X}\t{}\t{}\t{}\t{}".format(args.landscape, height_scale, trees, sentries, rng_usage))
+                # Landscape - Multiplier - Tree count - Sentry count - RNG usage - BBC/C64 - CPC - Spectrum - PC - Amiga
+                print("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
+                    args.landscape,
+                    height_scale,
+                    trees,
+                    sentries,
+                    rng_usage_for_landscape,
+                    codes[0],
+                    codes[1],
+                    codes[2],
+                    codes[3],
+                    codes[4]))
             else:
                 print("Landscape: {:04X}\n".format(args.landscape))
 
