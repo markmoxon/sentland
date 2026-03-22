@@ -339,7 +339,7 @@ def generate_landscape(landscape_bcd: int, landscape_step: int) -> tuple[array2d
     return maparr, height_scale
 
 
-def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool, colour_objects: bool, colour_angle: bool, objects: list[Object]) -> None:
+def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, landscape_step: int, export_file: str, view_landscape: bool, dark: bool, colour_objects: bool, colour_angle: bool, contour_map: bool, objects: list[Object]) -> None:
     """Crude viewing of generated landscape data"""
     try:
         import matplotlib.pyplot as plt
@@ -366,6 +366,14 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
     flat_colours = (flat_colours1[num_sentries], flat_colours2[num_sentries])
     slope_colours = ((0.6, 0.6, 0.6), (0.7, 0.7, 0.7))  # light grey, dark grey
 
+    # Contour colours, low to high
+    # Blue, green, light brown, dark brown
+    contour_colours = (
+        (32.5 / 100, 68.6 / 100, 87.1 / 100), (29.8 / 100, 82.0 / 100, 95.7 / 100), (56.5 / 100, 84.3 / 100, 96.9 / 100),
+        (62.4 / 100, 84.3 / 100, 79.2 / 100), (75.3 / 100, 86.7 / 100, 74.9 / 100),
+        (89.0 / 100, 87.5 / 100, 69.8 / 100), (100.0 / 100, 90.2 / 100, 65.1 / 100), (98.0 / 100, 75.7 / 100, 49.4 / 100),
+        (91.8 / 100, 62.0 / 100, 32.5 / 100), (82.4 / 100, 52.2 / 100, 21.6 / 100), (75.3 / 100, 41.2 / 100, 9.8 / 100))
+
     # Sentinel is red or blue
     sentinel_colours = (
         (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0),
@@ -390,7 +398,7 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
     for y in range(len(Y)):
         for x in range(len(X)):
             if maparr[y][x] & 0xF:
-                colors[y, x] = slope_colours[(x + y) & 1]
+                colors[y, x] = get_contour_colour(x, y, maparr, flat_colours, slope_colours, contour_colours, contour_map, is_tile=False)
             else:
                 if colour_objects:
                     object_stack = objects_at(x, y, objects)
@@ -404,9 +412,16 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
                         elif object_stack[0].type == ObjType.TREE:
                             colors[y, x] = tree_colours[num_sentries]
                     else:
-                        colors[y, x] = flat_colours[(x + y) & 1]
+                        colors[y, x] = get_contour_colour(x, y, maparr, flat_colours, slope_colours, contour_colours, contour_map, is_tile=True)
+                elif contour_map:
+                    object_stack = objects_at(x, y, objects)
+                    if object_stack and object_stack[0].type == ObjType.ROBOT:
+                        # Player is red on contour map
+                        colors[y, x] = (1.0, 0.0, 0.0)
+                    else:
+                        colors[y, x] = get_contour_colour(x, y, maparr, flat_colours, slope_colours, contour_colours, contour_map, is_tile=True)
                 else:
-                    colors[y, x] = flat_colours[(x + y) & 1]
+                    colors[y, x] = get_contour_colour(x, y, maparr, flat_colours, slope_colours, contour_colours, contour_map, is_tile=True)
 
     if dark:
         plt.style.use("dark_background")
@@ -415,13 +430,26 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
-    if colour_objects:
+    if contour_map and colour_angle:
+        # Overhead view for contour map
+        ax.view_init(elev=90, azim=-45, roll=45)
+    elif colour_objects or contour_map:
         if colour_angle:
             # More overhead for viewing player object in landscape 1122
             ax.view_init(elev=74, azim=-82, roll=-12)
         else:
             # Slightly overhead view, good for object colours
             ax.view_init(elev=60, azim=-65, roll=7)
+    else:
+        # Normal overhead view
+        ax.view_init(elev=30, azim=-60, roll=0)
+
+    if contour_map:
+        # Single-entry legend
+        player_legend = Line2D([], [], color=(1.0, 0.0, 0.0), marker='s', ls='', label='Player')
+        plt.legend(handles=[player_legend], loc='upper right', bbox_to_anchor=(0.96, 1.04))
+    elif colour_objects:
+        # Full legend
         sentinel_legend = Line2D([], [], color=sentinel_colours[num_sentries], marker='s', ls='', label='Sentinel')
         sentry_legend = Line2D([], [], color=sentry_colours[num_sentries], marker='s', ls='', label='Sentry')
         player_legend = Line2D([], [], color=player_colours[num_sentries], marker='s', ls='', label='Player')
@@ -451,6 +479,10 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         ax.set_zlim(0, 255)
         ax.zaxis.set_ticks([0, 64, 128, 192, 255])
 
+    if contour_map:
+        ax.zaxis.set_ticks([])
+        ax.set_zlabel('')
+
     match landscape_step:
         case 1:
             plt.title(f"Landscape {landscape_bcd:04X}\nSteps 1-4: Seed tile data")
@@ -467,15 +499,34 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
         case 7:
             plt.title(f"Landscape {landscape_bcd:04X}\nSteps 10-11: Calculate tile shapes")
         case _:
-            if colour_objects:
+            if contour_map:
+                if colour_angle:
+                    plt.title(f"Landscape {landscape_bcd:04X}", loc='left', x=0.05, y=0.95)
+                else:
+                    plt.title(f"Landscape {landscape_bcd:04X}", loc='left', y=1.05)
+            elif colour_objects:
                 plt.title(f"Landscape {landscape_bcd:04X}", loc='left', y=1.05)
             else:
                 plt.title(f"Landscape {landscape_bcd:04X}")
 
     if export_file:
-        plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
+        if contour_map and colour_angle:
+            plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.4, 0.5], [5.2, 4.5]]))
+        else:
+            plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
     if view_landscape:
         plt.show()
+
+
+def get_contour_colour(x, y, maparr, flat_colours, slope_colours, contour_colours, contour_map, is_tile) -> list[float]:
+    if contour_map:
+        altitude = height_at(x, y, maparr) - 1
+        return contour_colours[altitude]
+    else:
+        if is_tile:
+            return flat_colours[(x + y) & 1]
+        else:
+            return slope_colours[(x + y) & 1]
 
 
 def calc_num_sentries(landscape_bcd: int) -> int:
@@ -788,7 +839,9 @@ def args_parser() -> argparse.ArgumentParser:
     parser.add_argument("-c", "--colourobjects",
                         help="colour tiles containing objects", action="store_true", default=False)
     parser.add_argument("-a", "--angle",
-                        help="higher tile for colour objects", action="store_true", default=False)
+                        help="higher viewing angle for colour objects and contours", action="store_true", default=False)
+    parser.add_argument("-p", "--contourmap",
+                        help="contour map", action="store_true", default=False)
     return parser
 
 
@@ -925,7 +978,7 @@ def main() -> None:
 
         if args.view or args.export:
             num_sentries = len([o for o in objects if o.type == ObjType.SENTRY])
-            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark, args.colourobjects, args.angle, objects)
+            view_landscape(maparr, args.landscape, num_sentries, args.step, args.export, args.view, args.dark, args.colourobjects, args.angle, args.contourmap, objects)
 
 
 if __name__ == "__main__":
