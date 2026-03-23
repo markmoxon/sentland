@@ -447,7 +447,10 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
     if contour_map:
         # Single-entry legend
         player_legend = Line2D([], [], color=(1.0, 0.0, 0.0), marker='s', ls='', label='Player')
-        plt.legend(handles=[player_legend], loc='upper right', bbox_to_anchor=(0.96, 1.04))
+        if colour_angle:
+            plt.legend(handles=[player_legend], loc='upper right', bbox_to_anchor=(0.96, 1.04))
+        else:
+            plt.legend(handles=[player_legend], loc='upper right', bbox_to_anchor=(1.1, 1.14))
     elif colour_objects:
         # Full legend
         sentinel_legend = Line2D([], [], color=sentinel_colours[num_sentries], marker='s', ls='', label='Sentinel')
@@ -511,7 +514,7 @@ def view_landscape(maparr: array2d, landscape_bcd: int, num_sentries: int, lands
 
     if export_file:
         if contour_map and colour_angle:
-            plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.4, 0.5], [5.2, 4.5]]))
+            plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.4, 0.5], [5.21, 4.5]]))
         else:
             plt.savefig(export_file, dpi=144, bbox_inches=Bbox([[1.0, 0.0], [5.7, 4.81]]))
     if view_landscape:
